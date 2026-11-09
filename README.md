@@ -3,8 +3,7 @@
 The repair supports only these Windows x64 Legion clients:
 
 - **7.3.5.26972**: tested in-game.
-- **7.3.5.26365**: code signatures and downloader layout verified in the
-  running client; in-game testing is pending.
+- **7.3.5.26365**: tested in-game.
 
 The launcher selects a profile by its runtime signatures, not by the
 executable name, version metadata, or file hash. The DLL checks the selected
