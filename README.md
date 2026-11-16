@@ -1,5 +1,16 @@
 # Legion 7.3.5 login fix
 
+> [!WARNING]
+> Windows Smart App Control must be disabled for this application to work properly.
+> 
+> How to disable Smart App Control on Windows 11:
+> 1. Open the Start Menu and search for Windows Security.
+> 2. Navigate to App & browser control.
+> 3. Click on Smart App Control settings.
+> 4. Select Off to disable Smart App Control.
+> 5. Confirm the change if prompted.
+> 6. Restart the application.
+
 The repair supports only these Windows x64 Legion clients:
 
 - **7.3.5.26972**: tested in-game.
