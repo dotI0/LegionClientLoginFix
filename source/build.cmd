@@ -26,7 +26,7 @@ if not "%RC_STATUS%"=="0" exit /b 1
 pushd "%WORK%" || exit /b 1
 cl.exe /nologo /std:c++17 /W4 /EHsc /O2 /MT "%SRC%Loader.cpp" "%SRC%Cache.cpp" comdlg32.lib user32.lib /link /OUT:StartWoWWithLoginFix.exe Launcher.res
 if errorlevel 1 goto failed
-cl.exe /nologo /std:c++17 /W4 /EHsc /O2 /MT /DWOW_LOGIN_REPAIR /LD "%SRC%WowLoginProbe.cpp" "%SRC%WatcherRepair.cpp" /link /OUT:WowLoginRepair.dll
+cl.exe /nologo /std:c++17 /W4 /EHsc /O2 /MT /DWOW_LOGIN_REPAIR /LD "%SRC%WowLoginProbe.cpp" "%SRC%WatcherRepair.cpp" "%SRC%CharacterLimit.cpp" user32.lib /link /OUT:WowLoginRepair.dll
 if errorlevel 1 goto failed
 copy /Y "WowLoginRepair.dll" "%PACKAGE%\WowLoginRepair.dll" >nul || goto failed
 copy /Y "StartWoWWithLoginFix.exe" "%PACKAGE%\StartWoWWithLoginFix.exe" >nul || goto failed

@@ -12,6 +12,7 @@
 #include <vector>
 #include "Cache.h"
 #include "ClientProfile.h"
+#include "CharacterLimit.h"
 
 static_assert(sizeof(void*) == 8, "Build with the x64 toolchain");
 
@@ -240,14 +241,14 @@ namespace
         return nullptr;
     }
 
-    int StartProbe(HANDLE process, MODULEENTRY32W const& module, wchar_t const* path, bool log)
+    int StartProbe(HANDLE process, MODULEENTRY32W const& module, wchar_t const* path, bool log, bool fiftyCharacters)
     {
         Log.Write(L"Repair DLL is loaded in WoW. Checking its entry point.");
         // The probe only installs its callback when the explicit entry point is invoked.
         HMODULE local = LoadLibraryExW(path, nullptr, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!local)
             return Fail(L"Could not inspect the probe DLL", GetLastError());
-        FARPROC const entry = GetProcAddress(local, "WowLoginRepairStart");
+        FARPROC const entry = GetProcAddress(local, "WowLoginRepairStartV2");
         if (!entry)
         {
             FreeLibrary(local);
@@ -266,7 +267,8 @@ namespace
             return Fail(L"The loaded probe does not match this DLL; restart the test client");
 
         Log.Write(L"Activating the login fix.");
-        void* const options = reinterpret_cast<void*>(static_cast<std::uintptr_t>(log));
+        std::uintptr_t const flags = (log ? WowLogin::LogOption : 0) | (fiftyCharacters ? WowLogin::FiftyCharactersOption : 0);
+        void* const options = reinterpret_cast<void*>(flags);
         Handle start(CreateRemoteThread(process, nullptr, 0, reinterpret_cast<LPTHREAD_START_ROUTINE>(remote), options, 0, nullptr));
         if (!start)
             return Fail(L"Could not start diagnostics in the client", GetLastError());
@@ -275,7 +277,9 @@ namespace
         DWORD status = 0;
         if (!GetExitCodeThread(start.Value, &status))
             return Fail(L"Could not read the diagnostic status", GetLastError());
-        if (status == 1)
+        bool const characterLimitFailed = fiftyCharacters && status > WowLogin::CharacterLimitFailure &&
+            status <= (WowLogin::CharacterLimitFailure | static_cast<DWORD>(WowLogin::CharacterLimitResult::TimedOut));
+        if (status == 1 || characterLimitFailed)
         {
             if (log)
             {
@@ -287,6 +291,32 @@ namespace
             }
             else
                 std::wprintf(L"WoW login fix active. Logging disabled.\n");
+            if (fiftyCharacters)
+            {
+                if (characterLimitFailed)
+                {
+                    auto const result = static_cast<WowLogin::CharacterLimitResult>(status & 0xFF);
+                    wchar_t const* detail = L"The client UI override could not be confirmed.";
+                    switch (result)
+                    {
+                        case WowLogin::CharacterLimitResult::Unsupported: detail = L"The character-limit code signatures do not match a supported profile."; break;
+                        case WowLogin::CharacterLimitResult::NoWindow: detail = L"The client's main window could not be found."; break;
+                        case WowLogin::CharacterLimitResult::AlreadyStarted: detail = L"The character-limit override was already requested."; break;
+                        case WowLogin::CharacterLimitResult::HookFailed: detail = L"The client UI-thread callback could not be installed."; break;
+                        case WowLogin::CharacterLimitResult::PostFailed: detail = L"The startup message could not be sent to the client UI thread."; break;
+                        case WowLogin::CharacterLimitResult::TimerFailed: detail = L"The client UI-thread timer could not be started."; break;
+                        case WowLogin::CharacterLimitResult::TimedOut: detail = L"The client UI thread did not confirm startup in time."; break;
+                        default: break;
+                    }
+                    Log.Write(L"Login fix active, but the requested 50-character UI override did not start.");
+                    Log.Write(detail);
+                    wchar_t message[512]{};
+                    swprintf_s(message, _countof(message), L"The login fix is active, but the requested 50-character UI override did not start.\n\n%ls\n\nClose WoW normally before retrying.", detail);
+                    MessageBoxW(nullptr, message, L"WoW Login Fix", MB_OK | MB_ICONWARNING);
+                    return 1;
+                }
+                Log.Write(L"50-character GlueXML override installed on the client UI thread. The server must also allow 50 characters.");
+            }
             return 0;
         }
         switch (status)
@@ -300,6 +330,7 @@ namespace
             case 8: return Fail(L"Callback changed before installation; no callback changed by the probe");
             case 9: return Fail(L"Watcher repair signature mismatch; nothing was installed");
             case 10: return Fail(L"Could not retain the repair DLL; nothing was installed");
+            case 11: return Fail(L"Unsupported launcher options; rebuild the EXE and DLL together");
             default:
                 wchar_t message[64]{};
                 swprintf_s(message, _countof(message), L"Unexpected diagnostic exit status: 0x%08lX.", status);
@@ -320,7 +351,7 @@ int wmain(int argc, wchar_t* argv[])
     if (directory.empty())
         return Fail(L"Could not resolve the launcher directory");
     std::wstring selection;
-    bool log = false, high = false, clearCache = false, forwardOnly = false;
+    bool log = false, high = false, clearCache = false, forwardOnly = false, fiftyCharacters = false;
     bool missingClientPath = false;
     std::vector<wchar_t const*> gameArguments;
     for (int i = 1; i < argc; ++i)
@@ -336,6 +367,8 @@ int wmain(int argc, wchar_t* argv[])
             high = true;
         else if (std::wcscmp(option, L"-clear-cache") == 0)
             clearCache = true;
+        else if (std::wcscmp(option, L"-50-chars") == 0)
+            fiftyCharacters = true;
         else if (std::wcscmp(option, L"--client") == 0)
         {
             if (++i == argc || !argv[i][0])
@@ -450,7 +483,7 @@ int wmain(int argc, wchar_t* argv[])
         {
             if (_wcsicmp(module.szExePath, probePath.c_str()) != 0)
                 return Fail(L"A different DLL with the same name is already loaded");
-            return StartProbe(process.Value, module, probePath.c_str(), log);
+            return StartProbe(process.Value, module, probePath.c_str(), log, fiftyCharacters);
         }
         if (_wcsicmp(module.szExePath, ownerPath) == 0 && rva < module.modBaseSize)
             remoteLoadLibrary = reinterpret_cast<LPTHREAD_START_ROUTINE>(reinterpret_cast<std::uintptr_t>(module.modBaseAddr) + rva);
@@ -494,7 +527,7 @@ int wmain(int argc, wchar_t* argv[])
     for (MODULEENTRY32W const& module : modules)
     {
         if (_wcsicmp(module.szExePath, probePath.c_str()) == 0)
-            return StartProbe(process.Value, module, probePath.c_str(), log);
+            return StartProbe(process.Value, module, probePath.c_str(), log, fiftyCharacters);
     }
     return Fail(L"The probe was not loaded; do not retry with elevated permissions");
 }

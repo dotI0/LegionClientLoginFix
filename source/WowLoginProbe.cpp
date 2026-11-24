@@ -8,6 +8,7 @@
 #include <cstring>
 #include <cwchar>
 #include "ClientProfile.h"
+#include "CharacterLimit.h"
 #ifdef WOW_LOGIN_REPAIR
 #include "WatcherRepair.h"
 #endif
@@ -516,8 +517,11 @@ namespace
     }
 }
 
-extern "C" __declspec(dllexport) DWORD WINAPI WowLoginRepairStart(void* options)
+extern "C" __declspec(dllexport) DWORD WINAPI WowLoginRepairStartV2(void* options)
 {
+    auto const flags = reinterpret_cast<std::uintptr_t>(options);
+    if (flags & ~(WowLogin::LogOption | WowLogin::FiftyCharactersOption))
+        return 11;
     if (Started.load())
         return 2;
 
@@ -567,7 +571,7 @@ extern "C" __declspec(dllexport) DWORD WINAPI WowLoginRepairStart(void* options)
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
         reinterpret_cast<LPCWSTR>(&BufferLock), &module))
         return 10;
-    if (options)
+    if (flags & WowLogin::LogOption)
         if (DWORD const error = StartLogging(module))
             return error;
 
@@ -579,5 +583,17 @@ extern "C" __declspec(dllexport) DWORD WINAPI WowLoginRepairStart(void* options)
             SetEvent(Wake);
         return 8;
     }
+    if (flags & WowLogin::FiftyCharactersOption)
+    {
+        auto const result = WowLogin::EnableFiftyCharacterSlots(base, profile->Build, module);
+        if (result != WowLogin::CharacterLimitResult::Active)
+            return WowLogin::CharacterLimitFailure | static_cast<DWORD>(result);
+    }
     return 1;
+}
+
+extern "C" __declspec(dllexport) DWORD WINAPI WowLoginRepairStart(void* log)
+{
+    // Existing launchers pass only a boolean logging option.
+    return WowLoginRepairStartV2(log ? reinterpret_cast<void*>(WowLogin::LogOption) : nullptr);
 }

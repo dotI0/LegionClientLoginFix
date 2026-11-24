@@ -58,6 +58,10 @@ No client executable, credentials, logs, or server files are included.
   and other reparse points are refused.
 - `-high`: Start WoW with Windows' High process priority. This is a launcher
   option, not a WoW argument.
+- `-50-chars`: Opt in to the 50-character selection-screen limit on build
+  **7.3.5.26972** or **7.3.5.26365**. Requires the matching server-side support
+  described below.
+  This option does not enable logging and is not passed to WoW.
 - `--client "path\to\Wow-64.exe"`: Select a client executable explicitly,
   including one with a different filename.
 
@@ -69,7 +73,42 @@ WoW arguments; everything after `--` is passed to WoW as-is.
 StartWoWWithLoginFix.exe
 StartWoWWithLoginFix.exe -console -high -log -clear-cache
 StartWoWWithLoginFix.exe --client "D:\Games\Legion\Wow-Test.exe" -log -- -console
+StartWoWWithLoginFix.exe -50-chars -log
 ```
+
+## Optional 50-character mode
+
+The login repair still supports both client builds listed above. The optional
+`-50-chars` extension supports **7.3.5.26972** and **7.3.5.26365**, with a
+separate runtime-signature profile for each build. If the requested extension
+cannot start, the launcher explains why;
+the already active login repair remains active.
+
+This mode maintains the stock GlueXML `MAX_CHARACTERS_PER_REALM` value at 50
+instead of 16, using the client's UI thread. It leaves other nonstandard values
+alone. It does not add a selection cache, change character GUIDs, or replace
+the character-sorting logic. No executable or GlueXML file is rewritten.
+Restart WoW without `-50-chars` to return to the stock interface.
+
+The server must separately permit the additional characters. For example:
+
+```ini
+CharactersPerAccount = 50
+CharactersPerRealm = 50
+```
+
+The server's character-reordering packet must also support up to 50 entries;
+changing only its configuration is not sufficient on an unmodified core.
+Its position values are byte-sized sort keys (for example 10, 20, 30), not
+roster indexes from 0 to 49. A server-side index check would reject valid
+reordering requests.
+The extension does not bypass server checks or create any characters itself.
+
+With `-log`, the launcher records whether the UI-thread override was installed
+or why it failed. That confirms installation, not a complete 50-character
+gameplay test. Test creation beyond 16, scrolling, reordering, restoring and
+logging in on a test account first. Also test returning with more than 16
+characters using the unmodified client before relying on that fallback.
 
 ## Build
 
@@ -78,3 +117,8 @@ Prompt for Visual Studio, run `source\build.cmd`. It builds both the EXE
 and DLL and embeds `source\icon.ico` in the launcher. Use the rebuilt files
 together; do not mix them with older versions. No third-party build
 dependencies are required.
+
+The new launcher requires the versioned DLL entry point so an older DLL cannot
+silently acknowledge `-50-chars` without applying it. The updated DLL retains
+the old entry point for existing launchers, with the original logging-only
+behavior.
