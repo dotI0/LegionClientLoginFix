@@ -11,6 +11,15 @@
 > 5. Confirm the change if prompted.
 > 6. Restart the application.
 
+> [!CAUTION]
+> **Antivirus detections**
+>
+> This launcher intentionally injects the included fix DLL into `Wow-64.exe` and patches the running client to fix the login issue. These techniques are also used by malware, which can cause antivirus software to flag the launcher.
+>
+> If your antivirus blocks it, you may need to add an exception for the launcher and fix DLL. Only allow files from a source you trust. Do not disable your antivirus or exclude your entire game folder.
+>
+> DLL injection is intentional here and does not, by itself, mean the application is malware. The complete source code is available in this repository. If you do not trust the provided binaries, you are welcome to review the code and build the application yourself.
+
 The repair supports only these Windows x64 Legion clients:
 
 - **7.3.5.26972**: tested in-game.
