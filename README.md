@@ -1,4 +1,4 @@
-# Legion 7.3.5 login fix
+# Legion 7.3.5 client mods
 
 > [!WARNING]
 > Windows Smart App Control must be disabled for this application to work properly.
